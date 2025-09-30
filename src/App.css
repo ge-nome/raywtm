@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: robet;
+  src: url(./fonts/roob.otf);
+}
+*{
+  font-family: robet;
+  margin: 0;
+  padding: 0;
+
+
+}
