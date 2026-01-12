@@ -1,7 +1,8 @@
 import { createSlice } from '@reduxjs/toolkit';
-import { collection, getDocs, addDoc, orderBy, query, where } from 'firebase/firestore';
+import { collection, getDoc, doc, getDocs, addDoc, orderBy, query, where } from 'firebase/firestore';
 import { db } from '../../firebase-config';  // Import the Firestore instance
 import { createAsyncThunk } from '@reduxjs/toolkit'; 
+import { getRelatedDocuments } from '../../helpers/fetchevents';
 
 const event = collection(db, "events");
 const organizers = collection(db, "organizers");
@@ -10,92 +11,79 @@ const partners = collection(db, "partners");
 
 // Define the initial state
 const initialState = {
-    event:[],
+    event:{},
     loading: false,
     error: null
 };
 
-    // Async thunk to fetch documents from Firestore
-    export const fetchDocuments = createAsyncThunk('eventSlice/fetchDocuments', async (department:any, { rejectWithValue }) => {
-        const q = query(event);      
-        try {
-            const querySnapshot = await getDocs(q); // Execute query
-            if (querySnapshot.empty) {
-                return rejectWithValue('No department found');
-            }
-            console.log(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            
-            const documents = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-            const sortedValues = documents.sort((a, b) => a.level - b.level);
-            return sortedValues;  // Return the documents array to be dispatched
-        }
-        catch (error: any) {
-            return rejectWithValue(error.response.data);
-        }
-    });
-    // Async thunk to fetch documents from Firestore
-    export const fetchRoles = createAsyncThunk('departSlice/fetchRoles', async (cred: {pf:string; mod:number}, { rejectWithValue }) => {
-        
-        
-        const q = query(roleref, where('pf', '==', cred.pf), where('resource', '==', cred.mod));      
-        try {
-            const querySnapshot = await getDocs(q); // Execute query
-            if (querySnapshot.empty) {
-                return [];
-            }
-            const documents = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-            const sortedValues = documents.sort((a, b) => a.id - b.id);
-            console.log(sortedValues);
-            
-            return sortedValues[0];  // Return the documents array to be dispatched
-        }
-        catch (error: any) {
-            return rejectWithValue(error.response.data);
-        }
-    });
-    export const fetchAllRoles = createAsyncThunk('departSlice/fetchAllRoles', async (cred: {pf:string}, { rejectWithValue }) => {
-        
-        
-        const q = query(roleref, where('pf', '==', cred.pf));      
-        try {
-            const querySnapshot = await getDocs(q); // Execute query
-            if (querySnapshot.empty) {
-                return [];
-            }
-            const documents = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-            const sortedValues = documents.sort((a, b) => a.id - b.id);
-            console.log(sortedValues);
-            
-            return sortedValues;  // Return the documents array to be dispatched
-        }
-        catch (error: any) {
-            return rejectWithValue(error.response.data);
-        }
-    });
-    export const fetchdepName = createAsyncThunk('departSlice/fetchdepName', async (department:any, { rejectWithValue }) => {
- 
-        const q = query(departmentref, where('id', '==', department));      
-        try {
-            const querySnapshot = await getDocs(q); // Execute query
-            if (querySnapshot.empty) {
-                console.log('empty');
-                
-                return rejectWithValue('No department found');
-            }
-            const documents = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-            const sortedValues = documents.sort((a, b) => a.level - b.level);
-            console.log(sortedValues);
-            
-            return sortedValues;  // Return the documents array to be dispatched
 
-        }
-        catch (error: any) {
-            return rejectWithValue(error.response.data);
-        }
-    });
+
+    // Async thunk to fetch documents from Firestore
+    export const fetchDocuments = createAsyncThunk(
+  'documents/fetchDocuments',
+  async ({ collectionPath, eventId }, { rejectWithValue }) => {   
+    
+    try {
+      // 1. Get the event document
+          const eventRef = doc(db, collectionPath, eventId);
+          const eventSnap = await getDoc(eventRef);
+          
+          if (!eventSnap.exists()) {
+            throw new Error('Event not found');
+          }
+          
+          const eventData = eventSnap.data();
+          
+          // 2. Get organizers related to this event
+          const organizers = await getRelatedDocuments('organizers', 'eventId', eventId);
+          
+          // 3. Get speakers related to this event
+          const speakers = await getRelatedDocuments('speakers', 'eventId', eventId);
+          
+          // 4. Get partners related to this event
+          const partners = await getRelatedDocuments('partners', 'eventId', eventId);
+
+          const rsvp = await getRelatedDocuments('rsvp', 'eventId', eventId);
+          console.log(rsvp);
+          
+          // 5. Format the data as requested
+          const formattedData = {
+            id: eventId,
+            img: eventData.img || eventData.image || eventData.photo || '',
+            title: eventData.title || eventData.name || '',
+            date: eventData.date,
+            venue: eventData.venue || eventData.location || eventData.place || '',
+            rsvp: rsvp.length || 0,
+            about: eventData.about || eventData.description || eventData.details || '',
+            organizers: organizers.map((org, index) => ({
+              id: index + 1,
+              name: org.name || ''
+            })),
+            speakers: speakers.map((speaker, index) => ({
+              id: index + 1,
+              name: speaker.name || ''
+            })),
+            partners: partners.map((partner, index) => ({
+              id: index + 1,
+              name: partner.name ||  ''
+            }))
+          };
+          console.log(formattedData);
+          
+          return formattedData;
+      }
+      catch (error) {
+        console.log("Check your rules!");
+      return rejectWithValue({
+        message: error.message,
+        code: error.code
+      });
+    }
+  }
+);
 
 // Create a slice
-const departSlice = createSlice({
+const eventSlice = createSlice({
     name: 'event',
     initialState,
     reducers: {
@@ -119,21 +107,23 @@ const departSlice = createSlice({
         }
     },
     extraReducers: (builder) => {
-        builder
-            .addCase(fetchDocuments.pending, (state) => {
-            state.loading = true; // Set loading to true when fetch starts
-            })
-            .addCase(fetchDocuments.fulfilled, (state, action) => {
-            state.loading = false; // Stop loading when fetch is successful
-            state.depart = action.payload; // Set the fetched documents
-            })
-            .addCase(fetchDocuments.rejected, (state, action) => {
-            state.loading = false; // Stop loading if fetch fails
-            state.error = action.error.message; // Capture the error message
-            })
-        },
+  builder
+    .addCase(fetchDocuments.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    })
+    .addCase(fetchDocuments.fulfilled, (state, action) => {
+      state.loading = false;
+      state.event = action.payload; // The returned data
+    })
+    .addCase(fetchDocuments.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload.message; // The error from rejectWithValue
+    });
+}
     
 });
+
 
 // Export actions and reducer
 export const { addDocument, removeDocument, updateDocument } = departSlice.actions;

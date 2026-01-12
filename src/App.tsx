@@ -6,6 +6,7 @@ import {BrowserRouter, Route, Routes } from 'react-router-dom'
 import Signin from './signin'
 import Home from './home'
 import Event from './event'
+import FirebaseTest from './fbtest'
 // import Reauth from './auth'
 // import UsedContext from './auth/usercontext'
 
@@ -19,6 +20,7 @@ function App() {
               <Route path="/" element={<Home />}/>
               <Route path="/event/:di" element={<Event />}/>
               <Route path="/" element={<Signin />}/>
+              <Route path="/test" element={<FirebaseTest />}/>
               {/* <Route path="/signup" element={<Signup />}/> */}
               {/* <Route path="/dashboard" element={<Wrapper><Dashboard /></Wrapper>}/>
               <Route path="/team" element={<Wrapper><Departmental /></Wrapper>}/>
